@@ -16,21 +16,40 @@
                   type="number"
                   label="Average Speed (km/h)"
                   class="q-mb-md"
+                  @update:model-value="updateRoute(index)"
+                />
+
+                <q-input
+                  v-model="route.departureTime"
+                  type="datetime-local"
+                  label="Departure Time"
+                  class="q-mb-md"
+                  @update:model-value="updateRoute(index)"
                 />
 
                 <div v-for="(point, pointIndex) in route.coordinates" :key="pointIndex">
                   <div class="row q-mb-sm">
                     <q-input
-                      v-model="point.lat"
+                      v-model.number="point.lat"
                       type="number"
                       label="Latitude"
                       class="col q-pr-sm"
+                      @update:model-value="updateRoute(index)"
                     />
                     <q-input
-                      v-model="point.lng"
+                      v-model.number="point.lng"
                       type="number"
                       label="Longitude"
                       class="col q-pl-sm"
+                      @update:model-value="updateRoute(index)"
+                    />
+                    <q-btn
+                      flat
+                      round
+                      color="negative"
+                      icon="delete"
+                      @click="removePoint(index, pointIndex)"
+                      class="q-ml-sm"
                     />
                   </div>
                 </div>
@@ -55,14 +74,14 @@
       </q-scroll-area>
     </q-drawer>
 
-    <q-page-container>
+    <q-page-container class="map-wr">
       <div ref="mapContainer" class="map-container"></div>
     </q-page-container>
   </q-layout>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue';
+import { ref, onMounted, watch, onUnmounted } from 'vue';
 import L from 'leaflet';
 import 'leaflet-draw';
 
@@ -72,13 +91,28 @@ const map = ref(null);
 const routes = ref([]);
 const drawControl = ref(null);
 const routeLayers = ref([]);
+const updateInterval = ref(null);
+
+// Массив цветов для маршрутов
+const routeColors = [
+  '#3388ff', // синий
+  '#ff3333', // красный
+  '#33ff33', // зеленый
+  '#ff33ff', // розовый
+  '#ffaa33', // оранжевый
+  '#33ffff', // голубой
+  '#aa33ff', // фиолетовый
+  '#ffff33', // желтый
+  '#ff9999', // светло-красный
+  '#99ff99'  // светло-зеленый
+];
 
 // Добавление нового маршрута
 const addRoute = () => {
   routes.value.push({
     coordinates: [],
     speed: 60,
-    departureTime: new Date()
+    departureTime: new Date().toISOString().slice(0, 16)
   });
 };
 
@@ -89,6 +123,29 @@ const deleteRoute = (index) => {
     map.value.removeLayer(routeLayers.value[index]);
     routeLayers.value.splice(index, 1);
   }
+  // Обновляем все оставшиеся маршруты
+  routes.value.forEach((_, idx) => {
+    updateRoute(idx);
+  });
+};
+
+// Удаление точки маршрута
+const removePoint = (routeIndex, pointIndex) => {
+  routes.value[routeIndex].coordinates.splice(pointIndex, 1);
+  updateRoute(routeIndex);
+};
+
+// Форматирование оставшегося времени
+const formatTimeRemaining = (arrivalTime) => {
+  const now = new Date();
+  const arrival = new Date(arrivalTime);
+  const diff = arrival - now;
+
+  if (diff < 0) return 'Arrived';
+
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  return `${hours}h ${minutes}m remaining`;
 };
 
 // Расчет времени прибытия
@@ -103,49 +160,51 @@ const calculateArrivalTime = (route) => {
   }
 
   const timeInHours = totalDistance / route.speed;
-  const arrivalTime = new Date(route.departureTime);
-  arrivalTime.setHours(arrivalTime.getHours() + timeInHours);
+  const departureTime = new Date(route.departureTime);
+  const arrivalTime = new Date(departureTime.getTime() + timeInHours * 60 * 60 * 1000);
 
   return arrivalTime;
 };
 
-// Обновление маршрута на карте
-const updateRouteOnMap = (route, index) => {
+// Обновление маршрута
+const updateRoute = (index) => {
+  const route = routes.value[index];
   if (routeLayers.value[index]) {
     map.value.removeLayer(routeLayers.value[index]);
   }
 
   if (!route.coordinates || route.coordinates.length < 2) return;
 
+  // Получаем цвет маршрута
+  const routeColor = routeColors[index % routeColors.length];
+
   const polyline = L.polyline(route.coordinates, {
-    color: 'blue',
+    color: routeColor,
     weight: 3,
     opacity: 0.8
   });
 
-  // Маркер начальной точки с временем отправления
+  // Маркер начальной точки
   const startMarker = L.marker(route.coordinates[0])
     .bindTooltip(`
       <div class="tooltip-content">
         <strong>Departure Time:</strong><br>
-        ${route.departureTime.toLocaleTimeString()}
+        ${new Date(route.departureTime).toLocaleString()}
       </div>
     `, {
       permanent: true,
       direction: 'right'
     });
 
-  // Маркер конечной точки с расчетным временем прибытия
+  // Маркер конечной точки
   const arrivalTime = calculateArrivalTime(route);
   const endMarker = L.marker(route.coordinates[route.coordinates.length - 1])
     .bindTooltip(`
       <div class="tooltip-content">
-        <strong>Route Info:</strong><br>
+        <strong style="color: ${routeColor}">Route ${index + 1} Info:</strong><br>
         Speed: ${route.speed} km/h<br>
-        Arrival: ${arrivalTime ? arrivalTime.toLocaleTimeString() : 'N/A'}<br>
-        <button class="delete-btn" onclick="window.routeCalculator.deleteRoute(${index})">
-          Delete Route
-        </button>
+        Arrival: ${arrivalTime ? arrivalTime.toLocaleString() : 'N/A'}<br>
+        ${arrivalTime ? formatTimeRemaining(arrivalTime) : ''}
       </div>
     `, {
       permanent: true,
@@ -167,11 +226,14 @@ onMounted(() => {
   }).addTo(map.value);
 
   // Инициализация инструментов рисования
+  const drawnItems = new L.FeatureGroup();
+  map.value.addLayer(drawnItems);
+
   drawControl.value = new L.Control.Draw({
     draw: {
       polyline: {
         shapeOptions: {
-          color: 'blue',
+          color: routeColors[routes.value.length % routeColors.length],
           weight: 3
         }
       },
@@ -182,8 +244,7 @@ onMounted(() => {
       marker: false
     },
     edit: {
-      featureGroup: L.featureGroup(),
-      remove: true
+      featureGroup: drawnItems
     }
   });
 
@@ -200,60 +261,42 @@ onMounted(() => {
     routes.value.push({
       coordinates,
       speed: 60,
-      departureTime: new Date()
+      departureTime: new Date().toISOString().slice(0, 16)
     });
   });
 
-  // Экспорт функции удаления маршрута в глобальный объект
-  window.routeCalculator = {
-    deleteRoute
-  };
+  // Запуск обновления времени
+  updateInterval.value = setInterval(() => {
+    routes.value.forEach((_, index) => {
+      updateRoute(index);
+    });
+  }, 1000);
+});
+
+// Очистка при размонтировании
+onUnmounted(() => {
+  if (updateInterval.value) {
+    clearInterval(updateInterval.value);
+  }
 });
 
 // Отслеживание изменений маршрутов
 watch(routes, (newRoutes) => {
-  newRoutes.forEach((route, index) => {
-    updateRouteOnMap(route, index);
+  newRoutes.forEach((_, index) => {
+    updateRoute(index);
   });
 }, { deep: true });
-
-// Обновление времени прибытия каждую минуту
-const startTimeUpdates = () => {
-  setInterval(() => {
-    routes.value.forEach((route, index) => {
-      updateRouteOnMap(route, index);
-    });
-  }, 60000); // 60 секунд
-};
-
-onMounted(() => {
-  startTimeUpdates();
-});
 </script>
 
 <style>
 .map-container {
-  height: 100vh;
+  height: 100%;
   width: 100%;
 }
 
 .tooltip-content {
   font-size: 12px;
   line-height: 1.4;
-}
-
-.delete-btn {
-  margin-top: 8px;
-  padding: 4px 8px;
-  background-color: #ff4444;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.delete-btn:hover {
-  background-color: #cc0000;
 }
 
 /* Стили Leaflet */
@@ -268,7 +311,8 @@ onMounted(() => {
   box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.q-page-container {
+.map-wr {
   padding-top: 0px !important;
+  height: calc(100vh - 50px);
 }
 </style>
