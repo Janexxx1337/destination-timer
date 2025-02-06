@@ -28,7 +28,13 @@ export default defineConfig(() => {
         vueShim: true
       },
 
-      vueRouterMode: 'history', // Меняем на history для более чистых URL
+      vueRouterMode: 'history',
+      viteOptions: {
+        build: {
+          modulePreload: true,
+          cssCodeSplit: true
+        }
+      }
     },
 
     devServer: {
