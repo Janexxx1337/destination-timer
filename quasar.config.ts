@@ -3,7 +3,6 @@ import { defineConfig } from '#q-app/wrappers';
 export default defineConfig(() => {
   return {
     boot: [
-      // Можно добавить boot файл для инициализации Leaflet
       'leaflet'
     ],
 
@@ -14,7 +13,6 @@ export default defineConfig(() => {
     extras: [
       'roboto-font',
       'material-icons',
-      // Добавим Material иконки для UI элементов
     ],
 
     build: {
@@ -33,6 +31,14 @@ export default defineConfig(() => {
         build: {
           modulePreload: true,
           cssCodeSplit: true
+        },
+        optimizeDeps: {
+          include: ['leaflet', 'leaflet-draw']
+        },
+        resolve: {
+          alias: {
+            'leaflet': 'leaflet/dist/leaflet-src.esm.js'
+          }
         }
       }
     },
@@ -43,13 +49,11 @@ export default defineConfig(() => {
 
     framework: {
       config: {},
-      // Добавляем нужные плагины Quasar
       plugins: [
-        'Notify', // Для уведомлений
-        'Dialog', // Для диалоговых окон
-        'Loading' // Для индикации загрузки
+        'Notify',
+        'Dialog',
+        'Loading'
       ],
-      // Добавляем часто используемые компоненты
       components: [
         'QBtn',
         'QInput',
@@ -73,6 +77,19 @@ export default defineConfig(() => {
     animations: [
       'fadeIn',
       'fadeOut'
-    ]
+    ],
+
+    // Добавляем поддержку ассетов
+    build: {
+      // ... существующие настройки build
+      rollupOptions: {
+        external: ['leaflet'],
+        output: {
+          globals: {
+            leaflet: 'L'
+          }
+        }
+      }
+    }
   }
 });

@@ -1,12 +1,6 @@
-// RouteCalculator.vue
 <template>
   <q-layout view="hHh LpR fFf">
-    <!-- Add CSS links in the template -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
-
     <q-drawer show-if-above v-model="drawer" side="right" bordered>
-      <!-- Drawer content remains the same -->
       <q-scroll-area class="fit">
         <q-list padding>
           <q-item-label header>Routes</q-item-label>
@@ -87,6 +81,19 @@
 
 <script setup>
 import { ref, onMounted, watch, onUnmounted } from 'vue';
+import L from 'leaflet';
+import 'leaflet-draw';  // изменено
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+  iconUrl: icon,
+  shadowUrl: iconShadow,
+  iconSize: [25, 41],
+  iconAnchor: [12, 41]
+});
+
+L.Marker.prototype.setIcon(DefaultIcon);
 
 const drawer = ref(true);
 const mapContainer = ref(null);
@@ -95,20 +102,18 @@ const routes = ref([]);
 const drawControl = ref(null);
 const routeLayers = ref([]);
 const updateInterval = ref(null);
-let L; // Will store Leaflet instance
 
-// Массив цветов для маршрутов
 const routeColors = [
-  '#3388ff', // синий
-  '#ff3333', // красный
-  '#33ff33', // зеленый
-  '#ff33ff', // розовый
-  '#ffaa33', // оранжевый
-  '#33ffff', // голубой
-  '#aa33ff', // фиолетовый
-  '#ffff33', // желтый
-  '#ff9999', // светло-красный
-  '#99ff99'  // светло-зеленый
+  '#3388ff',
+  '#ff3333',
+  '#33ff33',
+  '#ff33ff',
+  '#ffaa33',
+  '#33ffff',
+  '#aa33ff',
+  '#ffff33',
+  '#ff9999',
+  '#99ff99'
 ];
 
 const addRoute = () => {
@@ -165,8 +170,6 @@ const calculateArrivalTime = (route) => {
 };
 
 const updateRoute = (index) => {
-  if (!L) return; // Guard against L not being loaded
-
   const route = routes.value[index];
   if (routeLayers.value[index]) {
     map.value.removeLayer(routeLayers.value[index]);
@@ -212,25 +215,7 @@ const updateRoute = (index) => {
   routeLayers.value[index] = routeGroup;
 };
 
-// Modified onMounted to load Leaflet from CDN
-onMounted(async () => {
-  // Load Leaflet and Leaflet.draw from CDN
-  const leafletScript = document.createElement('script');
-  leafletScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
-  document.head.appendChild(leafletScript);
-
-  await new Promise(resolve => leafletScript.onload = resolve);
-
-  const leafletDrawScript = document.createElement('script');
-  leafletDrawScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js';
-  document.head.appendChild(leafletDrawScript);
-
-  await new Promise(resolve => leafletDrawScript.onload = resolve);
-
-  // Now we can use Leaflet
-  L = window.L;
-
-  // Initialize map
+onMounted(() => {
   map.value = L.map(mapContainer.value).setView([51.505, -0.09], 13);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -289,11 +274,9 @@ onUnmounted(() => {
 });
 
 watch(routes, (newRoutes) => {
-  if (L) { // Guard against L not being loaded
-    newRoutes.forEach((_, index) => {
-      updateRoute(index);
-    });
-  }
+  newRoutes.forEach((_, index) => {
+    updateRoute(index);
+  });
 }, { deep: true });
 </script>
 
@@ -313,7 +296,7 @@ watch(routes, (newRoutes) => {
   border: 1px solid #666;
   padding: 8px;
   border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .map-wr {
