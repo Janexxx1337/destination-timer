@@ -1,7 +1,12 @@
 // RouteCalculator.vue
 <template>
   <q-layout view="hHh LpR fFf">
+    <!-- Add CSS links in the template -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+
     <q-drawer show-if-above v-model="drawer" side="right" bordered>
+      <!-- Drawer content remains the same -->
       <q-scroll-area class="fit">
         <q-list padding>
           <q-item-label header>Routes</q-item-label>
@@ -82,8 +87,6 @@
 
 <script setup>
 import { ref, onMounted, watch, onUnmounted } from 'vue';
-import L from 'leaflet';
-import 'leaflet-draw';
 
 const drawer = ref(true);
 const mapContainer = ref(null);
@@ -92,6 +95,7 @@ const routes = ref([]);
 const drawControl = ref(null);
 const routeLayers = ref([]);
 const updateInterval = ref(null);
+let L; // Will store Leaflet instance
 
 // Массив цветов для маршрутов
 const routeColors = [
@@ -107,7 +111,6 @@ const routeColors = [
   '#99ff99'  // светло-зеленый
 ];
 
-// Добавление нового маршрута
 const addRoute = () => {
   routes.value.push({
     coordinates: [],
@@ -116,26 +119,22 @@ const addRoute = () => {
   });
 };
 
-// Удаление маршрута
 const deleteRoute = (index) => {
   routes.value.splice(index, 1);
   if (routeLayers.value[index]) {
     map.value.removeLayer(routeLayers.value[index]);
     routeLayers.value.splice(index, 1);
   }
-  // Обновляем все оставшиеся маршруты
   routes.value.forEach((_, idx) => {
     updateRoute(idx);
   });
 };
 
-// Удаление точки маршрута
 const removePoint = (routeIndex, pointIndex) => {
   routes.value[routeIndex].coordinates.splice(pointIndex, 1);
   updateRoute(routeIndex);
 };
 
-// Форматирование оставшегося времени
 const formatTimeRemaining = (arrivalTime) => {
   const now = new Date();
   const arrival = new Date(arrivalTime);
@@ -148,7 +147,6 @@ const formatTimeRemaining = (arrivalTime) => {
   return `${hours}h ${minutes}m remaining`;
 };
 
-// Расчет времени прибытия
 const calculateArrivalTime = (route) => {
   if (!route.coordinates || route.coordinates.length < 2) return null;
 
@@ -156,7 +154,7 @@ const calculateArrivalTime = (route) => {
   for (let i = 0; i < route.coordinates.length - 1; i++) {
     const point1 = L.latLng(route.coordinates[i]);
     const point2 = L.latLng(route.coordinates[i + 1]);
-    totalDistance += point1.distanceTo(point2) / 1000; // Конвертация в километры
+    totalDistance += point1.distanceTo(point2) / 1000;
   }
 
   const timeInHours = totalDistance / route.speed;
@@ -166,8 +164,9 @@ const calculateArrivalTime = (route) => {
   return arrivalTime;
 };
 
-// Обновление маршрута
 const updateRoute = (index) => {
+  if (!L) return; // Guard against L not being loaded
+
   const route = routes.value[index];
   if (routeLayers.value[index]) {
     map.value.removeLayer(routeLayers.value[index]);
@@ -175,7 +174,6 @@ const updateRoute = (index) => {
 
   if (!route.coordinates || route.coordinates.length < 2) return;
 
-  // Получаем цвет маршрута
   const routeColor = routeColors[index % routeColors.length];
 
   const polyline = L.polyline(route.coordinates, {
@@ -184,7 +182,6 @@ const updateRoute = (index) => {
     opacity: 0.8
   });
 
-  // Маркер начальной точки
   const startMarker = L.marker(route.coordinates[0])
     .bindTooltip(`
       <div class="tooltip-content">
@@ -196,7 +193,6 @@ const updateRoute = (index) => {
       direction: 'right'
     });
 
-  // Маркер конечной точки
   const arrivalTime = calculateArrivalTime(route);
   const endMarker = L.marker(route.coordinates[route.coordinates.length - 1])
     .bindTooltip(`
@@ -216,16 +212,31 @@ const updateRoute = (index) => {
   routeLayers.value[index] = routeGroup;
 };
 
-// Инициализация карты при монтировании компонента
-onMounted(() => {
-  // Инициализация карты
+// Modified onMounted to load Leaflet from CDN
+onMounted(async () => {
+  // Load Leaflet and Leaflet.draw from CDN
+  const leafletScript = document.createElement('script');
+  leafletScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js';
+  document.head.appendChild(leafletScript);
+
+  await new Promise(resolve => leafletScript.onload = resolve);
+
+  const leafletDrawScript = document.createElement('script');
+  leafletDrawScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js';
+  document.head.appendChild(leafletDrawScript);
+
+  await new Promise(resolve => leafletDrawScript.onload = resolve);
+
+  // Now we can use Leaflet
+  L = window.L;
+
+  // Initialize map
   map.value = L.map(mapContainer.value).setView([51.505, -0.09], 13);
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors'
   }).addTo(map.value);
 
-  // Инициализация инструментов рисования
   const drawnItems = new L.FeatureGroup();
   map.value.addLayer(drawnItems);
 
@@ -250,7 +261,6 @@ onMounted(() => {
 
   map.value.addControl(drawControl.value);
 
-  // Обработка события создания маршрута
   map.value.on('draw:created', (e) => {
     const layer = e.layer;
     const coordinates = layer.getLatLngs().map(latLng => ({
@@ -265,7 +275,6 @@ onMounted(() => {
     });
   });
 
-  // Запуск обновления времени
   updateInterval.value = setInterval(() => {
     routes.value.forEach((_, index) => {
       updateRoute(index);
@@ -273,18 +282,18 @@ onMounted(() => {
   }, 1000);
 });
 
-// Очистка при размонтировании
 onUnmounted(() => {
   if (updateInterval.value) {
     clearInterval(updateInterval.value);
   }
 });
 
-// Отслеживание изменений маршрутов
 watch(routes, (newRoutes) => {
-  newRoutes.forEach((_, index) => {
-    updateRoute(index);
-  });
+  if (L) { // Guard against L not being loaded
+    newRoutes.forEach((_, index) => {
+      updateRoute(index);
+    });
+  }
 }, { deep: true });
 </script>
 
@@ -298,10 +307,6 @@ watch(routes, (newRoutes) => {
   font-size: 12px;
   line-height: 1.4;
 }
-
-/* Стили Leaflet */
-@import 'leaflet/dist/leaflet.css';
-@import 'leaflet-draw/dist/leaflet.draw.css';
 
 .leaflet-tooltip {
   background: white;
